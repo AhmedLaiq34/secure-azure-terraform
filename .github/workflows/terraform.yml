@@ -1,4 +1,4 @@
-name: Terraform CI/CD
+name: Terraform Deploy
 
 on:
   push:
@@ -7,34 +7,41 @@ on:
   pull_request:
 
 jobs:
-  terraform:
+  landing-zone:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
-
-      - name: Azure Login (Service Principal)
-        uses: azure/login@v1
         with:
-          creds: |
-            {
-              "clientId": "${{ secrets.ARM_CLIENT_ID }}",
-              "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
-              "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
-              "tenantId": "${{ secrets.ARM_TENANT_ID }}"
-            }
+          terraform_version: 1.5.7   # adjust to match your local version
 
-      - name: Terraform Init
-        run: terraform -chdir=terraform init
+      - name: Terraform Init (Landing Zone)
+        run: terraform -chdir=landing-zone init
 
-      - name: Terraform Plan
-        run: terraform -chdir=terraform plan -out=tfplan
+      - name: Terraform Plan (Landing Zone)
+        run: terraform -chdir=landing-zone plan -out=tfplan
 
-      - name: Terraform Apply
-        if: github.ref == 'refs/heads/main'
-        run: terraform -chdir=terraform apply -auto-approve tfplan
+      - name: Terraform Apply (Landing Zone)
+        run: terraform -chdir=landing-zone apply -auto-approve tfplan
 
+  infrastructure:
+    runs-on: ubuntu-latest
+    needs: landing-zone   # 🚨 ensures infra runs only AFTER LZ succeeds
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform Init (Infrastructure)
+        run: terraform -chdir=infrastructure init
+
+      - name: Terraform Plan (Infrastructure)
+        run: terraform -chdir=infrastructure plan -out=tfplan
+
+      - name: Terraform Apply (Infrastructure)
+        run: terraform -chdir=infrastructure apply -auto-approve tfplan
